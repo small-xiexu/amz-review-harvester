@@ -4,3 +4,4 @@
 *.csv
 backups/
 tmp/
+dist/
