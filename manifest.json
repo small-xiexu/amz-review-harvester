@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "亚马逊评论慢速采集助手",
+  "version": "0.8.9",
+  "description": "在用户可见且已登录的亚马逊评论页面中，慢速采集公开评论并导出 Excel 数据表和 AI 分析报告，支持北美三站顺序采集。",
+  "permissions": [
+    "storage",
+    "downloads",
+    "activeTab",
+    "unlimitedStorage"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "host_permissions": [
+    "https://*.amazon.com/*",
+    "https://*.amazon.ca/*",
+    "https://*.amazon.com.mx/*",
+    "https://translate.googleapis.com/*"
+  ],
+  "action": {
+    "default_title": "评论慢速采集助手",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.amazon.com/*",
+        "https://*.amazon.ca/*",
+        "https://*.amazon.com.mx/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>评论慢速采集助手</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <h1>评论慢速采集助手</h1>
+    <p class="hint">请先在浏览器中手动登录亚马逊。输入 ASIN 后，工具会按所选站点顺序自动打开评论页并连续翻页。</p>
+
+    <label class="full-field">
+      ASIN（可输入多个）
+      <textarea id="asin" rows="3" placeholder="例如 B0XXXXXXXX&#10;多个 ASIN 可用换行、空格或逗号分隔"></textarea>
+    </label>
+
+    <fieldset class="site-options">
+      <legend>采集站点</legend>
+      <div class="site-option-list">
+        <label class="checkbox-option">
+          <input type="checkbox" name="sites" value="CA">
+          加拿大站
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" name="sites" value="US" checked>
+          美国站
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" name="sites" value="MX">
+          墨西哥站
+        </label>
+      </div>
+    </fieldset>
+
+    <div class="grid">
+      <label>
+        最短等待（秒）
+        <input id="minDelay" type="number" min="20" max="600" value="45">
+      </label>
+      <label>
+        最长等待（秒）
+        <input id="maxDelay" type="number" min="30" max="900" value="90">
+      </label>
+    </div>
+
+    <label>
+      本次最多加载批次（每批约 10 条）
+      <input id="maxPages" type="number" min="1" max="100" value="10">
+    </label>
+
+    <section id="status" class="status">正在读取状态…</section>
+
+    <div class="actions">
+      <button id="start" class="primary">开始 / 继续</button>
+      <button id="pause">暂停</button>
+      <button id="exportExcel" class="wide">导出 Excel</button>
+      <button id="prepareReport" class="wide">生成 AI 报告</button>
+      <button id="downloadReport" class="wide">下载 AI 报告</button>
+      <button id="clear" class="danger">清空数据</button>
+    </div>
+
+    <section class="agent-card">
+      <div class="agent-card-head">
+        <div>
+          <h2>AI Agent</h2>
+          <p id="agentStatus">未配置</p>
+        </div>
+        <button id="toggleAgentConfig" type="button" class="ghost">配置</button>
+      </div>
+
+      <div id="agentConfigPanel" class="agent-config-panel" hidden>
+        <label>
+          服务商
+          <select id="agentProvider">
+            <option value="openai">OpenAI</option>
+            <option value="claude">Claude</option>
+          </select>
+        </label>
+        <label>
+          接口地址
+          <input id="agentUrl" type="url" placeholder="例如 https://api.openai.com/v1">
+        </label>
+        <label>
+          模型
+          <input id="agentModel" type="text" placeholder="例如 gpt-4o-mini">
+        </label>
+        <label>
+          API Key
+          <input id="agentApiKey" type="password" autocomplete="off" placeholder="输入 API Key">
+        </label>
+        <details class="prompt-settings">
+          <summary>高级提示词</summary>
+          <label>
+            分析提示词
+            <textarea id="agentPrompt" rows="8"></textarea>
+          </label>
+          <button id="resetAgentPrompt" type="button">恢复默认提示词</button>
+        </details>
+        <div class="agent-actions">
+          <button id="saveAgentConfig" type="button" class="primary">保存配置</button>
+          <button id="testAgentConfig" type="button">测试连接</button>
+          <button id="clearAgentConfig" type="button">清空</button>
+        </div>
+      </div>
+    </section>
+
+    <p class="warning">工具不会绕过验证码或访问限制。出现验证页时会自动暂停，请手动处理后再继续。</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
