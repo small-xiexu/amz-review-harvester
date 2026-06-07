@@ -48,32 +48,31 @@ const DEFAULT_AGENT_CONFIG = {
     agentModel: "claude-3-5-sonnet-latest"
   }
 };
-const DEFAULT_ANALYSIS_PROMPT = `你是一名面向跨境电商卖家的亚马逊竞品评论分析专家。
+const DEFAULT_ANALYSIS_PROMPT = `你是一名面向跨境电商卖家的产品分析顾问，擅长把亚马逊竞品评论读成新品开发和 Listing 优化建议。
 
-任务：基于已验证购买评论，写一份给人看的中文 Markdown 报告。它应该像一份清爽的运营分析笔记，普通人也能看懂，而不是固定 schema 或 JSON。
+任务：基于已验证购买评论，写一份普通运营、老板、产品经理都能快速看懂的中文 Markdown 洞察报告。报告要像“读完评论后的判断笔记”，不是数据报表，也不是评论明细复述。
 
 写作要求：
-1. 开头先给结论，直接告诉读者这批评论整体在说什么。
-2. 优先讲清楚哪里有痛点、哪里有亮点、哪里值得改。
-3. 改品建议必须具体、可执行，并按高/中/低优先级排序。
-4. Listing 卖点建议要尽量通俗，能直接用于标题、五点描述或 A+ 页面。
-5. 不要写 ASIN、评论ID、站点、链接、用户昵称或主页；也不要写“中文翻译”“原文”“1星/2星/3星/4星/5星”这些字段名或任何类似标签。
-6. 不要写证据表，不要用编号证据清单；如果要举例，只用自然语言概括，比如“有人提到……”“也有人反馈……”“少数用户觉得……”，不要保留原始标签。
-7. 不要编造评论中没有出现的信息；样本不足时要明确说明。
-8. 语言尽量自然、简洁、好读，不要堆术语，不要写成学术论文。
-9. 不要输出任何精确数值，尽量用“多数/少数/集中/偶见/整体偏正面/口碑分化”等说法，也不要出现星级数字。
-10. 总长度尽量控制在 800-1200 中文字。
-11. 直接输出 Markdown 正文，不要输出 JSON、表格、代码块或额外解释。
-12. 章节只用标题，不要写编号，不要写证据表。
+1. 先给一句明确结论，直接说明这个竞品为什么有人买、哪里容易翻车、我们做新品时最该抓什么。
+2. 重点回答：用户为什么买、喜欢什么、抱怨什么、产品怎么改、Listing 怎么卖、哪些风险要避开。
+3. 语言要像人说话，短句、判断明确、少术语；不要写成论文，不要写成字段清单。
+4. 改品建议必须具体、可执行，按优先级表达，但不要机械写“高/中/低优先级表格”。
+5. Listing 建议要能直接启发标题、五点描述、A+ 页面和卖点图。
+6. 只用“多数、少数、集中、偶发、整体偏正面、口碑分化”等模糊表达，不要输出精确评论数、比例、评分数字或星级。
+7. 不要写 ASIN、评论ID、站点、链接、用户昵称、主页、字段名、中文翻译、原文、证据、样本、reviewId、url、rating、site。
+8. 不要贴原始评论，不要列证据评论，不要用“证据包括/代表性反馈/评论摘录/用户原话”这类段落。需要举例时，用自然语言概括。
+9. 不要编造评论中没有出现的信息；如果信息不足，只简短提醒。
+10. 直接输出 Markdown 正文，不要输出 JSON、表格、代码块或额外解释。
+11. 总长度控制在 900-1300 中文字。
 
-推荐章节：
-一眼看懂
+建议章节：
+一句话结论
+用户为什么买
 主要痛点
 主要亮点
-可以怎么改
-适合怎么卖
-需要注意的风险
-代表性反馈。`;
+产品怎么改
+Listing 怎么写
+需要避开的坑。`;
 const ANALYSIS_TIMEOUT_MS = 5 * 60 * 1000;
 const ANALYSIS_HEARTBEAT_MS = 30 * 1000;
 
@@ -823,25 +822,6 @@ function xlsxBlob(rows, columns) {
   return new Blob([zipFiles(files)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 
-async function packageBlob(files) {
-  const normalizedFiles = [];
-  for (const file of files) {
-    const content = file.content instanceof Blob
-      ? new Uint8Array(await file.content.arrayBuffer())
-      : file.content;
-    normalizedFiles.push({ ...file, content });
-  }
-  return new Blob([zipFiles(normalizedFiles)], { type: "application/zip" });
-}
-
-function bytesToBase64(bytes) {
-  let binary = "";
-  for (let index = 0; index < bytes.length; index += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-  }
-  return btoa(binary);
-}
-
 function analysisRows(rows) {
   return rows.map((row) => ({
     ratingBand: ratingBandLabel(row.rating),
@@ -980,23 +960,6 @@ async function callAnalysisAgent(config, rows, state, payload = analysisRequestP
   });
 }
 
-function listFromAnalysis(value) {
-  if (!value) return [];
-  return Array.isArray(value) ? value : [value];
-}
-
-function displayValue(value) {
-  if (value === null || value === undefined) return "";
-  if (Array.isArray(value)) return value.map(displayValue).filter(Boolean).join("、");
-  if (typeof value === "object") {
-    return Object.entries(value)
-      .map(([key, item]) => `${key}: ${displayValue(item)}`)
-      .filter((item) => item && !item.endsWith(": "))
-      .join("；");
-  }
-  return String(value);
-}
-
 function normalizeAnalysisMarkdown(markdown) {
   let text = String(markdown || "").replace(/\r\n/g, "\n").trim();
   if (!text) return "";
@@ -1005,16 +968,51 @@ function normalizeAnalysisMarkdown(markdown) {
   return text;
 }
 
+function isMechanicalAnalysisLine(line) {
+  const text = String(line || "").trim();
+  if (!text) return false;
+  if (/https?:\/\//i.test(text)) return true;
+  if (/\b(?:reviewId|review_id|rating|site|url|asin)\b\s*[:：]/i.test(text)) return true;
+  if (/(?:评论ID|链接|用户昵称|主页|中文翻译|原文|证据包括|证据评论|评论摘录|用户原话|样本量|本次分析基于)\s*[:：]?/i.test(text)) return true;
+  if (/^\s*[-*]\s*(?:评论ID|reviewId|rating|site|url|asin|链接)/i.test(text)) return true;
+  if (/^\s*[-*]?\s*(?:[1-5]|一|二|两|三|四|五)\s*星(?:级)?\s*[:：]/.test(text)) return true;
+  if (/^\s*#{0,6}\s*(?:证据|代表性反馈|评论摘录|用户原话|原始评论|样本说明)\s*[:：]?\s*$/i.test(text)) return true;
+  return false;
+}
+
+function removeMechanicalAnalysisSections(markdown) {
+  const lines = normalizeAnalysisMarkdown(markdown).split("\n");
+  const out = [];
+  let skipping = false;
+  for (const line of lines) {
+    const text = line.trim();
+    const heading = text.match(/^(#{1,6})\s+(.+)$/);
+    const isEvidenceHeading = heading && /(?:证据|代表性反馈|评论摘录|用户原话|原始评论|样本说明|样本量)/i.test(heading[2].trim());
+    if (isEvidenceHeading) {
+      skipping = true;
+      continue;
+    }
+    if (skipping && heading) {
+      skipping = false;
+    }
+    if (skipping) continue;
+    if (isMechanicalAnalysisLine(line)) continue;
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
 function humanizeAnalysisMarkdown(markdown) {
-  let text = normalizeAnalysisMarkdown(markdown);
-  text = text.replace(/^(#{1,6}\s*)(?:\d+\s*[.)、．]?\s*)+/gm, "$1");
-  text = text.replace(/^(#{1,6}\s*)(?:[一二两三四五六七八九十]+\s*[.)、．]?\s*)+/gm, "$1");
+  let text = removeMechanicalAnalysisSections(markdown);
+  text = text.replace(/^(#{1,6}\s*)(?:\d+\s*[.)、．]\s*)+/gm, "$1");
+  text = text.replace(/^(#{1,6}\s*)(?:[一二两三四五六七八九十]+\s*[.)、．]\s*)+/gm, "$1");
   text = text.replace(/^\s*(?:\d+|[一二两三四五六七八九十]+)\s*[.)、．]\s+/gm, "- ");
-  text = text.replace(/(^|[\s（(])(?:[1-2]|一|二|两)\s*星(?:级)?(?:\s*[:：])?/g, "$1少数低分反馈");
-  text = text.replace(/(^|[\s（(])3\s*星(?:级)?(?:\s*[:：])?/g, "$1中性反馈");
-  text = text.replace(/(^|[\s（(])(?:[4-5]|四|五)\s*星(?:级)?(?:\s*[:：])?/g, "$1正面反馈");
-  text = text.replace(/\b(?:中文翻译|原文|评论ID|reviewId|ASIN|asin|站点|site|链接|url|用户昵称|主页)\s*[:：]?\s*/gi, "");
-  text = text.replace(/\b(?:中文翻译|原文|评论ID|reviewId|ASIN|asin|站点|site|链接|url|用户昵称|主页)\b/gi, "");
+  text = text.replace(/(^|[\s（(])(?:[1-5]|一|二|两|三|四|五)\s*星(?:级)?(?:\s*[:：])?/g, "$1相关反馈");
+  text = text.replace(/\b(?:中文翻译|原文|评论ID|reviewId|ASIN|asin|站点|site|链接|url|用户昵称|主页|rating)\s*[:：]?\s*/gi, "");
+  text = text.replace(/\b(?:中文翻译|原文|评论ID|reviewId|ASIN|asin|站点|site|链接|url|用户昵称|主页|rating)\b/gi, "");
+  text = text.replace(/(?:证据包括|证据评论|评论摘录|用户原话|代表性反馈|样本量|本次分析基于)\s*[:：]?/g, "");
+  text = text.replace(/https?:\/\/[^\s)）]+/gi, "");
+  text = text.replace(/^#{1,6}\s*$/gm, "");
   text = text.replace(/\n{3,}/g, "\n\n");
   return text.trim();
 }
@@ -1235,28 +1233,6 @@ function markdownToHtml(markdown) {
   return out.join("\n");
 }
 
-function ratingDistribution(rows) {
-  const counts = { "5": 0, "4": 0, "3": 0, "2": 0, "1": 0 };
-  rows.forEach((row) => {
-    const rating = Math.round(Number.parseFloat(row.rating));
-    if (counts[String(rating)] !== undefined) counts[String(rating)] += 1;
-  });
-  return counts;
-}
-
-function ratingNarrative(rows) {
-  const counts = ratingDistribution(rows);
-  const low = counts["1"] + counts["2"];
-  const neutral = counts["3"];
-  const high = counts["4"] + counts["5"];
-  if (!rows.length) return "暂无可用样本。";
-  if (low === 0 && high > 0) return "整体口碑偏正面，负面反馈不多。";
-  if (high >= low * 2 && low > 0) return "整体口碑偏正面，但少量低分反馈主要集中在耐用性、结构稳定性和做工细节。";
-  if (low > high) return "口碑分化较明显，低分反馈和正面反馈都不少，需要优先盯住核心缺陷。";
-  if (neutral > high && neutral > low) return "反馈比较中性，用户还在观望，说明产品体验并没有形成特别强的记忆点。";
-  return "整体评价还不错，但仍有几个明显问题需要重点处理。";
-}
-
 function reportHtml(analysisMarkdown, rows, state) {
   const asins = [...new Set(rows.map((row) => row.asin).filter(Boolean))];
   const reviewIds = [...new Set(rows.map((row) => row.reviewId).filter(Boolean))];
@@ -1264,7 +1240,7 @@ function reportHtml(analysisMarkdown, rows, state) {
   const markdown = stripTokens(humanizeAnalysisMarkdown(compactAnalysisMarkdown(analysisMarkdown)), [...asins, ...reviewIds]);
   const narrative = markdown ? markdownToHtml(markdown) : "<p>AI 未返回可展示的分析正文。</p>";
   const overviewText = rows.length
-    ? `这份报告只保留给运营看的结论、痛点、亮点和改法，细节请看导出的 Excel。`
+    ? `这份报告把评论明细整理成产品和运营判断：哪里值得学，哪里容易踩坑，下一版产品可以怎么做。`
     : "本报告未检测到可分析的已验证购买评论。";
   return `<!doctype html>
 <html lang="zh-CN">
@@ -1273,41 +1249,38 @@ function reportHtml(analysisMarkdown, rows, state) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>亚马逊竞品评论分析报告</title>
   <style>
-    :root{font-family:"Microsoft YaHei",Arial,sans-serif;color:#172033;background:#f3f6fb}
+    :root{font-family:"Microsoft YaHei",Arial,sans-serif;color:#172033;background:#f4f7fb}
     *{box-sizing:border-box}
-    body{margin:0;background:linear-gradient(180deg,#f6f8fc 0%,#edf2f8 100%)}
-    .report{max-width:1180px;margin:0 auto;padding:34px 28px 48px}
-    header{padding:28px 30px;border:1px solid #dbe3ee;border-radius:16px;background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);color:#132033;box-shadow:0 10px 30px rgba(20,35,58,.06)}
-    header h1{margin:0 0 8px;font-size:32px;line-height:1.15;color:#132033}
-    header p{max-width:100%;margin:0;color:#516178;line-height:1.8;font-size:15px}
+    body{margin:0;background:linear-gradient(180deg,#f7fafc 0%,#eef4f8 100%)}
+    .report{max-width:1040px;margin:0 auto;padding:34px 24px 46px}
+    header{padding:30px 32px;border:1px solid #dae7ec;border-radius:18px;background:#ffffff;color:#132033;box-shadow:0 12px 34px rgba(32,54,74,.06)}
+    header h1{margin:0 0 10px;font-size:32px;line-height:1.18;color:#132033;letter-spacing:0}
+    header p{max-width:880px;margin:0;color:#53657a;line-height:1.85;font-size:15px}
     .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
-    .chips span{padding:7px 11px;border-radius:999px;background:#edf3fb;color:#23344c;font-size:13px;border:1px solid #dce6f2}
-    section{border:1px solid #dce3ee;border-radius:14px;background:#fff;box-shadow:0 6px 20px rgba(24,39,75,.04)}
-    section{margin-top:16px;padding:22px}
-    section h2{margin:0 0 14px;font-size:20px;color:#172033}
-    .section-note{margin:0 0 16px;color:#52627a;line-height:1.7}
-    .markdown-body{color:#1b2740;line-height:1.86;font-size:15px}
-    .markdown-body h2,.markdown-body h3,.markdown-body h4{margin:16px 0 10px;color:#132033;line-height:1.3}
-    .markdown-body h2{font-size:22px}
-    .markdown-body h3{font-size:18px}
+    .chips span{padding:7px 12px;border-radius:999px;background:#eef6f5;color:#24454c;font-size:13px;border:1px solid #d8e8e7}
+    section{margin-top:16px;padding:28px 30px;border:1px solid #dce7ee;border-radius:18px;background:#fff;box-shadow:0 8px 24px rgba(34,51,75,.045)}
+    .markdown-body{color:#1b2740;line-height:1.9;font-size:16px}
+    .markdown-body h2,.markdown-body h3,.markdown-body h4{margin:24px 0 10px;color:#132033;line-height:1.32;letter-spacing:0}
+    .markdown-body h2{font-size:23px;padding-top:2px}
+    .markdown-body h3{font-size:19px}
     .markdown-body h4{font-size:16px}
-    .markdown-body p{margin:0 0 11px}
-    .markdown-body ul,.markdown-body ol{margin:0 0 11px 18px;padding:0}
-    .markdown-body li{margin:0 0 5px}
-    .markdown-body blockquote{margin:12px 0;padding:10px 14px;border-left:4px solid #c9d8ea;background:#f7faff;color:#43556f}
-    .markdown-body hr{border:0;border-top:1px solid #e6edf5;margin:14px 0}
+    .markdown-body h2:first-child,.markdown-body h3:first-child{margin-top:0}
+    .markdown-body p{margin:0 0 13px}
+    .markdown-body ul,.markdown-body ol{margin:0 0 14px 20px;padding:0}
+    .markdown-body li{margin:0 0 7px}
+    .markdown-body blockquote{margin:14px 0;padding:12px 16px;border-left:4px solid #9fcfc8;background:#f4fbf9;color:#43556f;border-radius:0 10px 10px 0}
+    .markdown-body hr{border:0;border-top:1px solid #e4edf3;margin:20px 0}
     .markdown-body code{padding:2px 6px;border-radius:6px;background:#eef3f8;font-family:Menlo,Consolas,monospace;font-size:.92em}
     .markdown-body a{color:#0b63ce;text-decoration:none}
     .markdown-body a:hover{text-decoration:underline}
-    .markdown-body h3:first-child{margin-top:0}
-    footer{margin-top:18px;color:#66758a;font-size:12px;line-height:1.65}
-    @media (max-width:780px){.report{padding:18px 12px}header{padding:22px}header h1{font-size:24px}section{padding:18px}.markdown-body{font-size:14px}}
+    footer{margin-top:16px;color:#66758a;font-size:12px;line-height:1.65;text-align:center}
+    @media (max-width:780px){.report{padding:18px 12px}header{padding:22px}header h1{font-size:24px}section{padding:20px}.markdown-body{font-size:15px}}
   </style>
 </head>
 <body>
   <main class="report">
     <header>
-      <h1>亚马逊竞品评论报告</h1>
+      <h1>竞品评论洞察报告</h1>
       <p>${escapeHtml(overviewText)}</p>
       <div class="chips">
         <span>ASIN：${escapeHtml(asins.join("、") || activeAsins(state).join("、") || "-")}</span>
@@ -1315,15 +1288,9 @@ function reportHtml(analysisMarkdown, rows, state) {
       </div>
     </header>
     <section>
-      <h2>一眼看懂</h2>
-      <p>${escapeHtml(ratingNarrative(rows))}</p>
-    </section>
-    <section>
-      <h2>运营解读</h2>
-      <p class="section-note">下面这部分只保留适合快速判断的内容，明细已经放在 Excel 里。</p>
       <div class="markdown-body">${narrative}</div>
     </section>
-    <footer>报告基于插件采集并导出的已验证购买评论生成。Excel 保留明细，这份报告只看结论、痛点、亮点和改法。</footer>
+    <footer>报告基于已验证购买评论生成。Excel 保留明细，这份报告只保留产品和运营判断。</footer>
   </main>
 </body>
 </html>`;
@@ -1390,21 +1357,16 @@ async function prepareReportPackage() {
     const analysisMarkdown = normalizeAnalysisMarkdown(rawAnalysis);
     if (!analysisMarkdown) throw new Error("AI 没有返回可展示的分析正文");
     await appendReportTrace(`AI 报告正文已收到，长度 ${analysisMarkdown.length} 字符`);
-    await appendReportTrace("开始打包 AI 报告");
+    await appendReportTrace("开始生成 HTML 报告");
     const report = reportHtml(analysisMarkdown, rows, exportState);
     const baseName = exportBaseName(exportState);
-    const zip = await packageBlob([
-      { name: `${baseName}-report.html`, content: new Blob([report], { type: "text/html;charset=utf-8" }) }
-    ]);
-    await appendReportTrace("HTML 报告已生成，正在压缩成 ZIP");
-    const packageBase64 = bytesToBase64(new Uint8Array(await zip.arrayBuffer()));
-    await appendReportTrace(`报告包已打包完成，准备保存为 ZIP`);
+    await appendReportTrace("HTML 报告已生成，准备保存");
     await setState({
       reviews,
       reportStatus: "ready",
       reportError: "",
-      reportPackage: packageBase64,
-      reportPackageName: `${baseName}.zip`,
+      reportPackage: report,
+      reportPackageName: `${baseName}-report.html`,
       reportFinishedAt: Date.now(),
       message: failed ? `AI 报告已准备好，${failed} 条翻译失败并保留原文` : `AI 报告已准备好，已验证购买 ${rows.length} 条`
     });

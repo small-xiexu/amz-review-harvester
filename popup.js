@@ -86,31 +86,31 @@ const DEFAULT_AGENT_CONFIG = {
     agentModel: "claude-3-5-sonnet-latest"
   }
 };
-const DEFAULT_ANALYSIS_PROMPT = `你是一名面向跨境电商卖家的亚马逊竞品评论分析专家。
+const DEFAULT_ANALYSIS_PROMPT = `你是一名面向跨境电商卖家的产品分析顾问，擅长把亚马逊竞品评论读成新品开发和 Listing 优化建议。
 
-任务：基于已验证购买评论，输出可直接阅读的中文 Markdown 分析报告。
+任务：基于已验证购买评论，写一份普通运营、老板、产品经理都能快速看懂的中文 Markdown 洞察报告。报告要像“读完评论后的判断笔记”，不是数据报表，也不是评论明细复述。
 
-分析要求：
-1. 开头先给结论，直接告诉读者这批评论整体在说什么。
-2. 优先讲清楚哪里有痛点、哪里有亮点、哪里值得改。
-3. 改品建议必须具体、可执行，并按高/中/低优先级排序。
-4. Listing 卖点建议要尽量通俗，能直接用于标题、五点描述或 A+ 页面。
-5. 不要写 ASIN、评论ID、站点、链接、用户昵称或主页，也不要写“中文翻译”“原文”“1星/2星/3星/4星/5星”这些字段名。
-6. 证据部分要用自然语言描述，不要做表格式罗列，直接说“有人提到……”“也有人反馈……”“少数用户觉得……”。
-7. 不要编造评论中没有出现的信息；样本不足时要明确说明。
-8. 不要输出任何精确数值，尽量用“多数/少数/集中/偶见/整体偏正面/口碑分化”等说法。
-9. 直接输出 Markdown 正文，不要输出 JSON、代码块、表格或额外解释。
-10. 章节只用标题，不要写编号，不要写证据表。
+写作要求：
+1. 先给一句明确结论，直接说明这个竞品为什么有人买、哪里容易翻车、我们做新品时最该抓什么。
+2. 重点回答：用户为什么买、喜欢什么、抱怨什么、产品怎么改、Listing 怎么卖、哪些风险要避开。
+3. 语言要像人说话，短句、判断明确、少术语；不要写成论文，不要写成字段清单。
+4. 改品建议必须具体、可执行，按优先级表达，但不要机械写“高/中/低优先级表格”。
+5. Listing 建议要能直接启发标题、五点描述、A+ 页面和卖点图。
+6. 只用“多数、少数、集中、偶发、整体偏正面、口碑分化”等模糊表达，不要输出精确评论数、比例、评分数字或星级。
+7. 不要写 ASIN、评论ID、站点、链接、用户昵称、主页、字段名、中文翻译、原文、证据、样本、reviewId、url、rating、site。
+8. 不要贴原始评论，不要列证据评论，不要用“证据包括/代表性反馈/评论摘录/用户原话”这类段落。需要举例时，用自然语言概括。
+9. 不要编造评论中没有出现的信息；如果信息不足，只简短提醒。
+10. 直接输出 Markdown 正文，不要输出 JSON、表格、代码块或额外解释。
+11. 总长度控制在 900-1300 中文字。
 
-输出要求：
-按以下章节组织内容：
-总览
+建议章节：
+一句话结论
+用户为什么买
 主要痛点
 主要亮点
-可以怎么改
-适合怎么卖
-需要注意的风险
-代表性反馈。`;
+产品怎么改
+Listing 怎么写
+需要避开的坑。`;
 
 function normalizeAsin(value) {
   return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
@@ -1164,26 +1164,6 @@ function downloadBlob(blob, filename, saveAs = true) {
   });
 }
 
-function base64ToBytes(value) {
-  const binary = atob(String(value || ""));
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
-}
-
-async function packageBlob(files) {
-  const normalizedFiles = [];
-  for (const file of files) {
-    const content = file.content instanceof Blob
-      ? new Uint8Array(await file.content.arrayBuffer())
-      : file.content;
-    normalizedFiles.push({ ...file, content });
-  }
-  return new Blob([zipFiles(normalizedFiles)], { type: "application/zip" });
-}
-
 function analysisRows(rows) {
   return rows.map((row) => ({
     ratingBand: ratingBandLabel(row.rating),
@@ -1258,8 +1238,8 @@ ui.downloadReport?.addEventListener("click", async () => {
     if (state.reportStatus !== "ready" || !state.reportPackage) {
       throw new Error("AI 报告还没有准备好");
     }
-    const zip = new Blob([base64ToBytes(state.reportPackage)], { type: "application/zip" });
-    await downloadBlob(zip, state.reportPackageName || `${exportBaseName(state)}.zip`);
+    const report = new Blob([String(state.reportPackage || "")], { type: "text/html;charset=utf-8" });
+    await downloadBlob(report, state.reportPackageName || `${exportBaseName(state)}-report.html`);
     await setState({ message: "AI 报告已下载" });
   } catch (error) {
     await setState({ message: `AI 报告下载失败：${error.message}` });
