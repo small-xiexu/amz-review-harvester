@@ -207,6 +207,15 @@ textarea {
   font-size: 14px;
 }
 
+.metric-batch strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+}
+
 .status-row {
   margin-top: 9px;
 }

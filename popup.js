@@ -10,6 +10,7 @@ const DEFAULT_STATE = {
   pageCount: 0,
   pageCountsByTask: {},
   pageCountsByAsin: {},
+  pageClicksByTask: {},
   completedTasks: [],
   completedAsins: [],
   maxPages: 10,
@@ -97,7 +98,7 @@ const DEFAULT_ANALYSIS_PROMPT = `你是一名面向跨境电商卖家的产品�
 4. 改品建议必须具体、可执行，按优先级表达，但不要机械写“高/中/低优先级表格”。
 5. Listing 建议要能直接启发标题、五点描述、A+ 页面和卖点图。
 6. 只用“多数、少数、集中、偶发、整体偏正面、口碑分化”等模糊表达，不要输出精确评论数、比例、评分数字或星级。
-7. 不要写 ASIN、评论ID、站点、链接、用户昵称、主页、字段名、中文翻译、原文、证据、样本、reviewId、url、rating、site。
+7. 不要写 ASIN、评论ID、站点、链接、用户昵称、主页、字段名、中文翻译、原文、证据、样本、reviewId、url、rating、site，也不要使用 1. 2. 3. 这类机械编号。
 8. 不要贴原始评论，不要列证据评论，不要用“证据包括/代表性反馈/评论摘录/用户原话”这类段落。需要举例时，用自然语言概括。
 9. 不要编造评论中没有出现的信息；如果信息不足，只简短提醒。
 10. 直接输出 Markdown 正文，不要输出 JSON、表格、代码块或额外解释。
@@ -492,22 +493,22 @@ function render(state, draft = lastRenderedDraft) {
   setInputValue(ui.maxDelay, draftValue(lastRenderedDraft, "maxDelay", state.maxDelay));
   setInputValue(ui.maxPages, draftValue(lastRenderedDraft, "maxPages", state.maxPages));
   const currentIndex = Math.max(tasks.findIndex((item) => item.key === task?.key), 0);
-  const currentPageCount = state.pageCountsByTask?.[task?.key] ?? state.pageCountsByAsin?.[task?.asin] ?? state.pageCount ?? 0;
+  const currentSaveCount = Number(state.pageCountsByTask?.[task?.key] ?? state.pageCountsByAsin?.[task?.asin] ?? state.pageCount ?? 0);
+  const currentClickCount = Number(state.pageClicksByTask?.[task?.key] ?? 0);
   const exportableReviews = filterReviews(state.reviews, state);
   const reportReady = state.reportStatus === "ready" && Boolean(state.reportPackage);
   const reportPreparing = state.reportStatus === "preparing";
   const reportFailed = state.reportStatus === "error";
   const excelReady = Number(state.excelExportedAt || 0) > 0;
   const reportStartedAt = Number(state.reportStartedAt || 0);
-  const reportStale = reportPreparing && reportStartedAt > 0 && Date.now() - reportStartedAt > 10 * 60 * 1000;
   const noExportableReviews = allTasksCompleted && !state.running && exportableReviews.length === 0;
   const reportTrace = Array.isArray(state.reportTrace) ? state.reportTrace.slice(-10) : [];
   const canExportExcel = allTasksCompleted && !state.running && exportableReviews.length > 0;
-  const canPrepareReport = excelReady && allTasksCompleted && !state.running && exportableReviews.length > 0 && (!reportPreparing || reportStale);
+  const canPrepareReport = excelReady && allTasksCompleted && !state.running && exportableReviews.length > 0 && !reportPreparing;
   const siteLabel = task ? SITE_CONFIG[task.site]?.label || task.site : "-";
   const taskCountText = tasks.length > 1 ? `${allTasksCompleted ? tasks.length : currentIndex + 1}/${tasks.length}` : "1/1";
-  const statusClass = reportFailed || reportStale || noExportableReviews ? "paused" : reportPreparing ? "running" : reportReady ? "completed" : allTasksCompleted ? "paused" : state.running ? "running" : "paused";
-  const statusLabel = noExportableReviews ? "无可导出" : reportFailed ? "AI 失败" : reportStale ? "AI 超时" : reportPreparing ? "AI 生成中" : reportReady ? "AI 已完成" : excelReady ? "Excel 已导出" : allTasksCompleted ? "待导出 Excel" : state.running ? "运行中" : "已暂停";
+  const statusClass = reportFailed || noExportableReviews ? "paused" : reportPreparing ? "running" : reportReady ? "completed" : allTasksCompleted ? "paused" : state.running ? "running" : "paused";
+  const statusLabel = noExportableReviews ? "无可导出" : reportFailed ? "AI 失败" : reportPreparing ? "AI 生成中" : reportReady ? "AI 已完成" : excelReady ? "Excel 已导出" : allTasksCompleted ? "待导出 Excel" : state.running ? "运行中" : "已暂停";
   if (ui.status) {
     ui.status.innerHTML = `
       <div class="status-head">
@@ -523,7 +524,7 @@ function render(state, draft = lastRenderedDraft) {
       </div>
       <div class="status-metrics">
         <div><span>任务</span><strong>${escapeHtml(taskCountText)}</strong></div>
-        <div><span>批次</span><strong>${escapeHtml(`${currentPageCount}/${state.maxPages}`)}</strong></div>
+        <div class="metric-batch"><span>批次</span><strong>${escapeHtml(`点击 ${currentClickCount}/${state.maxPages} · 保存 ${currentSaveCount}/${state.maxPages}`)}</strong></div>
         <div><span>已保存</span><strong>${escapeHtml(state.reviews.length)}</strong></div>
         <div><span>可导出</span><strong>${escapeHtml(exportableReviews.length)}</strong></div>
       </div>
@@ -541,7 +542,7 @@ function render(state, draft = lastRenderedDraft) {
   setElementDisabled(ui.pause, !state.running);
   setElementText(ui.exportExcel, noExportableReviews ? "无可导出评论" : excelReady ? "重新导出 Excel" : "导出 Excel");
   setElementDisabled(ui.exportExcel, excelExporting || !canExportExcel);
-  setElementText(ui.prepareReport, reportReady ? "重新生成 AI 报告" : reportFailed || reportStale ? "重新生成 AI 报告" : reportPreparing ? "AI 报告生成中" : excelReady ? "生成 AI 报告" : "先导出 Excel");
+  setElementText(ui.prepareReport, reportReady ? "重新生成 AI 报告" : reportFailed ? "重新生成 AI 报告" : reportPreparing ? "AI 报告生成中" : excelReady ? "生成 AI 报告" : "先导出 Excel");
   setElementDisabled(ui.prepareReport, reportStarting || reportPreparing || !canPrepareReport);
   setElementText(ui.downloadReport, reportReady ? "下载 AI 报告" : "AI 报告未生成");
   setElementDisabled(ui.downloadReport, reportDownloading || !reportReady);
@@ -618,7 +619,7 @@ ui.start?.addEventListener("click", async () => {
     const changedTasks = currentTasks.map((task) => task.key).join("|") !== tasks.map((task) => task.key).join("|");
     const allCompleted = tasks.length > 0 && tasks.every((task) => (current.completedTasks || []).includes(task.key));
     const reset = (currentTasks.length && changedTasks) || allCompleted
-      ? { reviews: [], pageCount: 0, pageCountsByTask: {}, pageCountsByAsin: {}, completedTasks: [], completedAsins: [], lastProcessedUrl: "", reportStatus: "idle", reportError: "", reportPackage: null, reportPackageName: "", excelExportedAt: 0, excelFailedCount: 0, reportStartedAt: 0, reportFinishedAt: 0, reportTrace: [] }
+      ? { reviews: [], pageCount: 0, pageCountsByTask: {}, pageCountsByAsin: {}, pageClicksByTask: {}, completedTasks: [], completedAsins: [], lastProcessedUrl: "", reportStatus: "idle", reportError: "", reportPackage: null, reportPackageName: "", excelExportedAt: 0, excelFailedCount: 0, reportStartedAt: 0, reportFinishedAt: 0, reportTrace: [] }
       : {};
     const nextIndex = changedTasks || allCompleted ? 0 : Number(current.currentTaskIndex ?? current.currentAsinIndex ?? 0);
     const nextTask = tasks[Math.min(nextIndex, tasks.length - 1)] || firstTask;
@@ -844,13 +845,25 @@ async function translateReviews(reviews) {
   for (let index = 0; index < result.length; index += 1) {
     const review = { ...result[index] };
     review.title = cleanTitle(review.title, review.rating);
+    const needsTitle = Boolean(review.title) && !review.titleZh;
+    const needsBody = Boolean(review.body) && !review.bodyZh;
+    let translationFailed = false;
     if (!review.title) review.titleZh = "";
     try {
-      review.titleZh = review.titleZh || await translateText(review.title);
-      review.bodyZh = review.bodyZh || await translateText(review.body);
+      if (needsTitle) review.titleZh = await translateText(review.title);
     } catch {
-      failed += 1;
+      translationFailed = true;
+      review.titleZh = "";
     }
+    try {
+      if (needsBody) review.bodyZh = await translateText(review.body);
+    } catch {
+      translationFailed = true;
+      review.bodyZh = "";
+    }
+    review.translationFailed = translationFailed;
+    review.translationComplete = !translationFailed && (!needsTitle || Boolean(review.titleZh)) && (!needsBody || Boolean(review.bodyZh));
+    if (translationFailed) failed += 1;
     result[index] = review;
     if (index % 5 === 0 || index === result.length - 1) {
       setElementText(ui.status, `正在翻译 ${index + 1}/${result.length} 条已验证购买评论，请不要关闭弹窗…`);
@@ -928,10 +941,13 @@ async function prepareExportData() {
     ? await translateReviews(filteredReviews)
     : { reviews: filteredReviews, failed: 0 };
   const mergedReviews = mergeReviewsByKey(state.reviews, translatedReviews);
+  const analysisRows = buildAnalysisRows(translatedReviews);
   return {
     state,
     failed,
+    filteredCount: filteredReviews.length,
     reviews: mergedReviews,
+    analysisRows,
     rows: prepareExportRows(translatedReviews, state),
     columns: EXPORT_COLUMNS
   };
@@ -1164,24 +1180,30 @@ function downloadBlob(blob, filename, saveAs = true) {
   });
 }
 
-function analysisRows(rows) {
-  return rows.map((row) => ({
-    ratingBand: ratingBandLabel(row.rating),
-    sentiment: row.sentiment,
-    verified: row.verified,
-    variant: row.variant,
-    color: row.color,
-    size: row.size,
-    title: row.title,
-    body: row.body
-  }));
+function buildAnalysisRows(rows) {
+  return rows
+    .filter((row) => !row.translationFailed)
+    .map((row) => {
+      const title = compactText(row.titleZh || row.title);
+      const body = compactText(row.bodyZh || row.body);
+      const reviewText = compactText([title, body].filter(Boolean).join(" "));
+      return {
+        ratingBand: ratingBandLabel(row.rating),
+        sentiment: row.sentiment,
+        variant: row.variant,
+        color: row.color,
+        size: row.size,
+        reviewText
+      };
+    })
+    .filter((row) => row.reviewText);
 }
 
 function analysisRequestPayload(state, rows) {
   return {
     projectName: "亚马逊竞品评论分析",
     generatedAt: new Date().toISOString(),
-    reviews: analysisRows(rows)
+    reviews: rows
   };
 }
 
@@ -1205,7 +1227,7 @@ ui.exportExcel?.addEventListener("click", async () => {
       reviews,
       excelExportedAt: Date.now(),
       excelFailedCount: failed,
-      message: failed ? `Excel 已导出，${failed} 条翻译失败并保留原文` : `Excel 已导出，已验证购买 ${rows.length} 条`
+      message: failed ? `Excel 已导出，${failed} 条翻译失败已留空，其余翻译已保留` : `Excel 已导出，已验证购买 ${rows.length} 条`
     });
   } catch (error) {
     await setState({ message: `Excel 导出失败：${error.message}` });

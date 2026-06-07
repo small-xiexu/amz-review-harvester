@@ -294,7 +294,11 @@ function pageCountsByTask(state, task, pageCount) {
   return { ...(state.pageCountsByTask || {}), [task.key]: pageCount };
 }
 
-async function finishCurrentTask(state, reviews, pageCount, reason, expectedTask = activeTask(state)) {
+function pageClicksByTask(state, task, clickCount) {
+  return { ...(state.pageClicksByTask || {}), [task.key]: clickCount };
+}
+
+async function finishCurrentTask(state, reviews, pageCount, reason, expectedTask = activeTask(state), clickCount = Number(state.pageClicksByTask?.[expectedTask?.key] ?? 0)) {
   const tasks = activeTasks(state);
   const task = expectedTask;
   const expectedIndex = tasks.findIndex((item) => item.key === task?.key);
@@ -304,6 +308,7 @@ async function finishCurrentTask(state, reviews, pageCount, reason, expectedTask
   const completedTasks = [...new Set([...(state.completedTasks || []), task?.key].filter(Boolean))];
   const completedAsins = [...new Set([...(state.completedAsins || []), task?.asin].filter(Boolean))];
   const counts = pageCountsByTask(state, task, pageCount);
+  const clickCounts = pageClicksByTask(state, task, clickCount);
   const nextIndex = currentIndex + 1;
   const nextTask = tasks[nextIndex];
 
@@ -316,6 +321,7 @@ async function finishCurrentTask(state, reviews, pageCount, reason, expectedTask
       currentAsinIndex: activeAsins(state).indexOf(nextTask.asin),
       pageCount: counts[nextTask.key] || 0,
       pageCountsByTask: counts,
+      pageClicksByTask: clickCounts,
       completedAsins,
       completedTasks,
       lastProcessedUrl: "",
@@ -335,6 +341,7 @@ async function finishCurrentTask(state, reviews, pageCount, reason, expectedTask
     reviews,
     pageCount,
     pageCountsByTask: counts,
+    pageClicksByTask: clickCounts,
     completedAsins,
     completedTasks,
     reportStatus: "preparing",
@@ -413,6 +420,7 @@ async function collect() {
   const reviews = mergeReviews(state.reviews || [], incoming);
   const newReviewCount = reviews.length - (state.reviews || []).length;
   const currentPageCount = Number(state.pageCountsByTask?.[task.key] ?? state.pageCountsByAsin?.[asin] ?? state.pageCount ?? 0);
+  const currentClickCount = Number(state.pageClicksByTask?.[task.key] ?? 0);
   const pageCount = currentPageCount + (newReviewCount > 0 ? 1 : 0);
   const counts = pageCountsByTask(state, task, pageCount);
 
@@ -457,20 +465,24 @@ async function collect() {
     const button = findLoadMoreButton();
     if (!button) {
       const { collectorState: latestState } = await chrome.storage.local.get("collectorState");
-      await finishCurrentTask(latestState || state, reviews, pageCount, `${asin} / ${site} 加载更多按钮已消失`, task);
+      await finishCurrentTask(latestState || state, reviews, pageCount, `${asin} / ${site} 加载更多按钮已消失`, task, currentClickCount);
       return;
     }
 
     const previousCount = document.querySelectorAll("[data-hook='review']").length;
     button.scrollIntoView({ behavior: "smooth", block: "center" });
     await new Promise((resolve) => setTimeout(resolve, 1200));
+    const nextClickCount = currentClickCount + 1;
+    await updateState({
+      pageClicksByTask: pageClicksByTask(latest || state, task, nextClickCount)
+    });
     button.click();
     await updateState({ nextActionAt: 0, message: "已点击加载更多，正在等待新评论出现…" });
 
     const loaded = await waitForNewReviews(previousCount);
     if (!loaded) {
       const { collectorState: latestState } = await chrome.storage.local.get("collectorState");
-      await finishCurrentTask(latestState || state, reviews, pageCount, `${asin} / ${site} 点击后 20 秒内没有新评论`, task);
+      await finishCurrentTask(latestState || state, reviews, pageCount, `${asin} / ${site} 点击后 20 秒内没有新评论`, task, nextClickCount);
       return;
     }
     collect();

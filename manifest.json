@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "亚马逊评论慢速采集助手",
-  "version": "0.8.9",
+  "version": "0.9.0",
   "description": "在用户可见且已登录的亚马逊评论页面中，慢速采集公开评论并导出 Excel 数据表和 AI 分析报告，支持北美三站顺序采集。",
   "permissions": [
     "storage",
