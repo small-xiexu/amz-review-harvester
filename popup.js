@@ -54,9 +54,11 @@ const ids = [
   "start",
   "pause",
   "exportExcel",
+  "exportJson",
   "prepareReport",
   "downloadReport",
   "clear",
+  "agentCard",
   "agentStatus",
   "toggleAgentConfig",
   "agentConfigPanel",
@@ -68,7 +70,8 @@ const ids = [
   "resetAgentPrompt",
   "saveAgentConfig",
   "testAgentConfig",
-  "clearAgentConfig"
+  "clearAgentConfig",
+  "workbenchModeToggle"
 ];
 const ui = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
 let excelExporting = false;
@@ -77,6 +80,24 @@ let reportDownloading = false;
 let lastRenderedState = null;
 let lastRenderedDraft = { ...DEFAULT_DRAFT };
 let countdownTimer = null;
+let currentWorkbenchMode = false;
+async function getWorkbenchMode() {
+  const { workbenchMode } = await chrome.storage.local.get("workbenchMode");
+  return Boolean(workbenchMode);
+}
+
+async function setWorkbenchMode(enabled) {
+  await chrome.storage.local.set({ workbenchMode: enabled });
+}
+
+function applyWorkbenchMode(enabled) {
+  if (ui.agentCard) ui.agentCard.hidden = enabled;
+  if (ui.prepareReport) ui.prepareReport.hidden = enabled;
+  if (ui.downloadReport) ui.downloadReport.hidden = enabled;
+  if (ui.exportJson) ui.exportJson.hidden = !enabled;
+  if (ui.workbenchModeToggle) ui.workbenchModeToggle.checked = enabled;
+}
+
 const DEFAULT_AGENT_CONFIG = {
   openai: {
     agentUrl: "https://api.openai.com/v1",
@@ -547,10 +568,12 @@ function render(state, draft = lastRenderedDraft) {
   setElementText(ui.downloadReport, reportReady ? "下载 AI 报告" : "AI 报告未生成");
   setElementDisabled(ui.downloadReport, reportDownloading || !reportReady);
   scheduleCountdownRefresh(state);
+  applyWorkbenchMode(currentWorkbenchMode);
 }
 
 async function renderCollector() {
-  const [state, draft] = await Promise.all([getState(), getDraft()]);
+  const [state, draft, workbenchMode] = await Promise.all([getState(), getDraft(), getWorkbenchMode()]);
+  currentWorkbenchMode = workbenchMode;
   render(state, draft);
 }
 
@@ -1337,8 +1360,61 @@ chrome.storage.onChanged.addListener(async (changes, areaName) => {
   if (areaName !== "local") return;
   if (changes.collectorState) render(await getState(), lastRenderedDraft);
   if (changes.agentConfig) renderAgentConfig(await getAgentConfig());
+  if (changes.workbenchMode) {
+    currentWorkbenchMode = Boolean(changes.workbenchMode.newValue);
+    applyWorkbenchMode(currentWorkbenchMode);
+  }
 });
 
 bindDraftAutosave();
 renderCollector();
 getAgentConfig().then(renderAgentConfig);
+
+ui.workbenchModeToggle?.addEventListener("change", async () => {
+  await setWorkbenchMode(Boolean(ui.workbenchModeToggle.checked));
+});
+
+ui.exportJson?.addEventListener("click", async () => {
+  try {
+    const state = await getState();
+    const filteredReviews = filterReviews(state.reviews, state);
+    const rows = prepareExportRows(filteredReviews, state);
+    const exportRows = rows.map((row) => ({
+      asin: compactText(row.asin),
+      site: compactText(row.site),
+      review_id: compactText(row.reviewId),
+      raw_date: compactText(row.rawDate),
+      review_date: compactText(row.date),
+      raw_rating: compactText(row.rawRating),
+      rating: compactText(row.rating),
+      sentiment: compactText(row.sentiment),
+      author: compactText(row.author),
+      author_profile_url: compactText(row.authorProfileUrl),
+      verified: compactText(row.verified),
+      helpful_count: compactText(row.helpfulCount),
+      has_buyer_image: compactText(row.hasBuyerImage),
+      image_count: compactText(row.imageCount),
+      image_urls: compactText(row.imageUrls),
+      has_video: compactText(row.hasVideo),
+      variant: compactText(row.variant),
+      color: compactText(row.color),
+      size: compactText(row.size),
+      title_en: compactText(row.title),
+      body_en: compactText(row.body),
+      title_zh: compactText(row.titleZh),
+      body_zh: compactText(row.bodyZh),
+      url: compactText(row.url)
+    }));
+    const payload = JSON.stringify({
+      exported_at: new Date().toISOString(),
+      asin_list: activeAsins(state),
+      sites: Array.isArray(state.sites) ? state.sites : [state.site || "US"],
+      review_count: exportRows.length,
+      reviews: exportRows
+    }, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    await downloadBlob(blob, `${exportBaseName(state)}.json`, true);
+  } catch (error) {
+    console.error("JSON export failed:", error);
+  }
+});
