@@ -56,12 +56,13 @@
       <button id="start" class="primary">开始 / 继续</button>
       <button id="pause">暂停</button>
       <button id="exportExcel" class="wide">导出 Excel</button>
+      <button id="exportJson" class="wide" hidden>导出 JSON（工作台）</button>
       <button id="prepareReport" class="wide">生成 AI 报告</button>
       <button id="downloadReport" class="wide">下载 AI 报告</button>
       <button id="clear" class="danger">清空数据</button>
     </div>
 
-    <section class="agent-card">
+    <section id="agentCard" class="agent-card">
       <div class="agent-card-head">
         <div>
           <h2>AI Agent</h2>
@@ -107,6 +108,11 @@
     </section>
 
     <p class="warning">工具不会绕过验证码或访问限制。出现验证页时会自动暂停，请手动处理后再继续。</p>
+
+    <label class="mode-toggle">
+      <input type="checkbox" id="workbenchModeToggle">
+      工作台模式（隐藏 AI 功能，支持导出 JSON）
+    </label>
   </main>
   <script src="popup.js"></script>
 </body>
